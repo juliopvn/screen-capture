@@ -85,3 +85,13 @@ npm run dev
 ```
 
 4. Abre [http://localhost:3000](http://localhost:3000). El navegador pedirá permiso para compartir pantalla.
+
+<!-- BEGIN cc:que-se-valora -->
+¡Hola! Para que tengas claro qué busco cuando corrija tu proyecto "Video Capture", te he preparado esta sección. Así sabes dónde poner el foco.
+
+## 📋 Qué se valora
+
+Cuando revise tu proyecto, me fijaré mucho en que **todo lo que pide el enunciado funcione correctamente**, porque eso es lo que más pesa en la nota. También le daré bastante importancia a que **tu código esté bien organizado y sea fácil de entender**, y a que **el vídeo demo muestre claramente todo lo que has hecho**. Por último, aunque con un peso menor, miraré que **expliques bien tus decisiones y cómo has resuelto los problemas**.
+
+Recuerda que el enunciado es la guía principal, y la evaluación no te penalizará por cosas que no se pidan explícitamente en él.
+<!-- END cc:que-se-valora -->
