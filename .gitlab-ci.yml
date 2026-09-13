@@ -83,37 +83,20 @@ test:e2e:
 
 # Deploy strategy: Vercel's native Git integration only supports GitHub,
 # GitLab.com and Bitbucket — NOT self-hosted GitLab instances like
-# gitlab.codecrypto.academy. So this project uses Vercel's own documented
-# pattern for self-hosted Git: `vercel pull` (fetch project settings + the
-# env vars configured in the Vercel dashboard) → `vercel build` (compiles
-# in the runner, source never leaves this pipeline) → `vercel deploy
-# --prebuilt` (uploads only the build output). Requires VERCEL_TOKEN,
-# VERCEL_ORG_ID, VERCEL_PROJECT_ID as masked+protected GitLab CI/CD
-# variables (Settings → CI/CD → Variables) — see AGENTS.md for how to get
-# them. Production env vars themselves (MONGODB_URI, S3_*) live only in
-# Vercel's project settings, never in GitLab.
-deploy:preview:
-  stage: deploy
-  needs: ["lint", "build", "test:e2e"]
-  rules:
-    - if: '$CI_COMMIT_BRANCH != "main"'
-      when: manual
-  script:
-    - npm install --global vercel@latest
-    - vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
-    - vercel build --token="$VERCEL_TOKEN"
-    - vercel deploy --prebuilt --token="$VERCEL_TOKEN" -m gitlabDeployment=1 -m gitlabCommitRef="$CI_COMMIT_BRANCH"
-
-deploy:production:
+# gitlab.codecrypto.academy. Rather than driving deploys from this
+# pipeline (Vercel CLI + a VERCEL_TOKEN living in GitLab), this repo
+# push-mirrors to a GitHub repo (Settings → Repository → Mirroring
+# repositories in GitLab) and Vercel's project is imported natively from
+# that GitHub mirror — Vercel deploys itself on every push the mirror
+# forwards, entirely outside GitLab. See AGENTS.md for the mirror setup.
+#
+# So this stage is NOT a deploy step: it's the required quality gate
+# GitLab's branch protection points at, so main can't merge with red
+# lint/build/E2E.
+deploy:gate:
   stage: deploy
   needs: ["lint", "build", "test:e2e"]
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-  environment:
-    name: production
-    url: https://$PRODUCTION_DOMAIN
   script:
-    - npm install --global vercel@latest
-    - vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-    - vercel build --prod --token="$VERCEL_TOKEN"
-    - vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" -m gitlabDeployment=1 -m gitlabCommitRef="$CI_COMMIT_BRANCH"
+    - echo "Quality gate passed on main — the GitHub mirror + Vercel's native import handle the actual deploy."
