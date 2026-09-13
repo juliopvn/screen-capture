@@ -176,18 +176,26 @@ local, con `AGENTS.md` y E2E incluidos.
 Bloque 2 (Fases 10–14) está en marcha:
 
 - **Fase 10 (R2)** — `lib/s3.ts` funciona contra RustFS y R2 sin cambio de
-  lógica, solo de variables de entorno, **con una excepción importante**:
-  R2 no implementa `PutBucketPolicy` (sí `PutBucketCors`). `ensureBucketExists`
-  intenta configurar la política de lectura pública y, si el backend la
-  rechaza, registra un aviso y continúa en vez de romper la subida — en R2
-  la lectura pública se activa una vez, a mano, desde el dashboard
-  (Public Development URL o dominio propio en el bucket), no vía API en
-  cada request. Decisión tomada: **bucket de lectura pública** (no URLs
-  firmadas de lectura), porque el flujo actual reproduce con
-  `<video src={s3Url}>` sin firmar — mantiene la arquitectura simple para
-  vídeos que no son sensibles. Si en el futuro se necesita contenido
-  privado, `RecordingsList`/`GET /api/recordings` tendrían que generar una
-  URL firmada de lectura por grabación en cada listado, ya que las firmadas
+  lógica, solo de variables de entorno, **con dos excepciones importantes**
+  en `ensureBucketExists`, ambas best-effort (avisan por consola y siguen
+  en vez de romper la subida si fallan):
+  - `PutBucketPolicy` (lectura pública): R2 **no implementa esta operación
+    en absoluto**, la acepte el token que la acepte. La lectura pública en
+    R2 se activa una vez, a mano, desde el dashboard del bucket
+    (**Settings → Public access**: R2.dev subdomain o dominio propio).
+  - `PutBucketCors`: R2 sí la implementa, pero es una operación de
+    administración de bucket — **requiere un token con permiso "Admin
+    Read & Write"**. Un token "Object Read & Write" con scope a un solo
+    bucket (el que recomendamos por mínimo privilegio) recibe 403 aquí.
+    Con ese tipo de token, configura el CORS del bucket a mano una vez
+    desde **R2 → bucket → Settings → CORS Policy**, con `AllowedOrigins`
+    apuntando al dominio real de producción (el valor de `S3_CORS_ORIGIN`).
+  Decisión tomada: **bucket de lectura pública** (no URLs firmadas de
+  lectura), porque el flujo actual reproduce con `<video src={s3Url}>` sin
+  firmar — mantiene la arquitectura simple para vídeos que no son
+  sensibles. Si en el futuro se necesita contenido privado,
+  `RecordingsList`/`GET /api/recordings` tendrían que generar una URL
+  firmada de lectura por grabación en cada listado, ya que las firmadas
   expiran y no se pueden guardar como `s3Url` estático en Mongo.
 - **Fase 11 (Atlas)** — `lib/mongodb.ts` no necesita cambios: la cadena
   `mongodb+srv://...` de Atlas es solo otro valor de `MONGODB_URI`.

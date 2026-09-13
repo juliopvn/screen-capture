@@ -43,22 +43,36 @@ export function ensureBucketExists(): Promise<void> {
       // The browser uploads the video directly to this bucket (see
       // createUploadUrl below), which makes it a cross-origin PUT — without
       // a CORS policy the browser's preflight rejects it before it's sent.
-      await s3Client.send(
-        new PutBucketCorsCommand({
-          Bucket: env.S3_BUCKET,
-          CORSConfiguration: {
-            CORSRules: [
-              {
-                AllowedOrigins: [env.S3_CORS_ORIGIN],
-                AllowedMethods: ["GET", "PUT", "HEAD"],
-                AllowedHeaders: ["*"],
-                ExposeHeaders: ["ETag"],
-                MaxAgeSeconds: 3600,
-              },
-            ],
-          },
-        }),
-      );
+      // Best-effort: PutBucketCors is a bucket-admin operation. On
+      // Cloudflare R2 it requires an "Admin Read & Write" token — an
+      // "Object Read & Write" token scoped to just this bucket (the
+      // least-privilege choice we recommend, see AGENTS.md) gets a 403
+      // here. Warn and continue rather than failing every upload; in that
+      // case CORS must be set once by hand in the R2 dashboard instead.
+      try {
+        await s3Client.send(
+          new PutBucketCorsCommand({
+            Bucket: env.S3_BUCKET,
+            CORSConfiguration: {
+              CORSRules: [
+                {
+                  AllowedOrigins: [env.S3_CORS_ORIGIN],
+                  AllowedMethods: ["GET", "PUT", "HEAD"],
+                  AllowedHeaders: ["*"],
+                  ExposeHeaders: ["ETag"],
+                  MaxAgeSeconds: 3600,
+                },
+              ],
+            },
+          }),
+        );
+      } catch (error) {
+        console.warn(
+          "Skipping PutBucketCors (likely missing bucket-admin permission on this token). " +
+            "Configure CORS for the bucket manually if uploads fail from the browser — see AGENTS.md.",
+          error instanceof Error ? error.message : error,
+        );
+      }
       // Recordings are played back with a plain <video src>, so the bucket
       // needs anonymous read access. RustFS (local/S3-compatible) supports
       // this via a standard bucket policy. Cloudflare R2 does NOT implement
