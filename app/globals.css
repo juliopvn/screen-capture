@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/*
+  Design system: "capture stage" — a broadcast-monitor palette (tally-light
+  red, phosphor green, timecode amber) on a near-black stage. Committed to a
+  single dark theme deliberately: recording/monitoring tools run dark so the
+  operator can judge what's on screen without glare or eye strain while
+  sharing it, the same reason NLEs and OBS default dark.
+*/
+:root {
+  --stage: #0b0d0f;
+  --panel: #15181c;
+  --panel-raised: #1b1f24;
+  --line: #262b31;
+  --line-strong: #383f47;
+  --paper: #e8e6df;
+  --paper-dim: #9aa0a6;
+  --rec: #ff3b30;
+  --rec-dim: #7a231f;
+  --signal: #4cff7a;
+  --amber: #ffb443;
+}
+
+@theme inline {
+  --color-stage: var(--stage);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-paper: var(--paper);
+  --color-paper-dim: var(--paper-dim);
+  --color-rec: var(--rec);
+  --color-rec-dim: var(--rec-dim);
+  --color-signal: var(--signal);
+  --color-amber: var(--amber);
+
+  --font-display: var(--font-big-shoulders);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--stage);
+  color: var(--paper);
+}
+
+/* Tabular numerals everywhere a timecode or count is live-updating, so
+   digits don't jitter the layout as they change. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes pulse-rec {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-pulse-rec {
+  animation: pulse-rec 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-rec {
+    animation: none;
+  }
+}

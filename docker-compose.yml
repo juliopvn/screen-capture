@@ -1,0 +1,57 @@
+# Local development dependencies: MongoDB + RustFS (S3-compatible storage).
+#
+# RustFS's own defaults put the S3 API on container port 9000 and the web
+# console on 9001. This project's env vars point S3_ENDPOINT at
+# http://localhost:9001 (see .env.example), so the port mapping below flips
+# that: host 9001 -> container 9000 (S3 API), host 9002 -> container 9001
+# (console). Open http://localhost:9002 to browse the bucket in a browser.
+name: screen-capture-dev
+services:
+  mongodb:
+    image: mongo:7
+    container_name: screen-capture-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RustFS runs as uid/gid 10001 and refuses to start if its data dir isn't
+  # already owned by that user — this one-shot container fixes ownership on
+  # a fresh volume before rustfs starts (same pattern as RustFS's own
+  # published docker-compose.yml).
+  rustfs-init:
+    image: alpine:3
+    container_name: screen-capture-rustfs-init
+    command: sh -c "mkdir -p /data/rustfs0 && chown -R 10001:10001 /data/rustfs0"
+    volumes:
+      - rustfs_data:/data/rustfs0
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: screen-capture-rustfs
+    restart: unless-stopped
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+    ports:
+      - "9001:9000" # S3 API -> matches S3_ENDPOINT=http://localhost:9001
+      - "9002:9001" # Web console
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfs_data:/data/rustfs0
+
+volumes:
+  mongodb_data:
+  rustfs_data:

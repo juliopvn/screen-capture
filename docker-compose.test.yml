@@ -1,0 +1,48 @@
+# Ephemeral stack for E2E tests — separate ports from the dev stack
+# (docker-compose.yml) so both can run at once, and named volumes that are
+# always wiped by `docker compose ... down -v` (see scripts/test-e2e.sh) so
+# no state survives between runs.
+name: screen-capture-e2e
+services:
+  mongodb-test:
+    image: mongo:7
+    container_name: screen-capture-mongodb-test
+    ports:
+      - "27018:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # See docker-compose.yml for why this chown step is required by RustFS.
+  rustfs-test-init:
+    image: alpine:3
+    container_name: screen-capture-rustfs-test-init
+    command: sh -c "mkdir -p /data/rustfs0 && chown -R 10001:10001 /data/rustfs0"
+    volumes:
+      - rustfs_test_data:/data/rustfs0
+
+  rustfs-test:
+    image: rustfs/rustfs:latest
+    container_name: screen-capture-rustfs-test
+    depends_on:
+      rustfs-test-init:
+        condition: service_completed_successfully
+    ports:
+      - "9101:9000" # S3 API
+      - "9102:9001" # Console
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfs_test_data:/data/rustfs0
+
+volumes:
+  rustfs_test_data:
