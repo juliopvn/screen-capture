@@ -81,21 +81,39 @@ test:e2e:
     reports:
       junit: test-results/junit.xml
 
-# Deploy strategy: Vercel's native GitLab integration (recommended by
-# PROMT.md Fase 12) — connect the Vercel project directly to this GitLab
-# repo; Vercel then deploys previews per MR and production on merge to
-# main, entirely outside this pipeline. This stage is therefore NOT a
-# deploy step: it's the required quality gate GitLab's branch protection
-# points at, so main can't merge with red lint/build/E2E.
-#
-# Alternative (not used): deploy explicitly via `vercel deploy --prod
-# --token=$VERCEL_TOKEN` here, using VERCEL_TOKEN / VERCEL_ORG_ID /
-# VERCEL_PROJECT_ID as protected CI/CD variables. Switch to this only if
-# the native Git integration isn't available on the current Vercel plan.
-deploy:gate:
+# Deploy strategy: Vercel's native Git integration only supports GitHub,
+# GitLab.com and Bitbucket — NOT self-hosted GitLab instances like
+# gitlab.codecrypto.academy. So this project uses Vercel's own documented
+# pattern for self-hosted Git: `vercel pull` (fetch project settings + the
+# env vars configured in the Vercel dashboard) → `vercel build` (compiles
+# in the runner, source never leaves this pipeline) → `vercel deploy
+# --prebuilt` (uploads only the build output). Requires VERCEL_TOKEN,
+# VERCEL_ORG_ID, VERCEL_PROJECT_ID as masked+protected GitLab CI/CD
+# variables (Settings → CI/CD → Variables) — see AGENTS.md for how to get
+# them. Production env vars themselves (MONGODB_URI, S3_*) live only in
+# Vercel's project settings, never in GitLab.
+deploy:preview:
+  stage: deploy
+  needs: ["lint", "build", "test:e2e"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH != "main"'
+      when: manual
+  script:
+    - npm install --global vercel@latest
+    - vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+    - vercel build --token="$VERCEL_TOKEN"
+    - vercel deploy --prebuilt --token="$VERCEL_TOKEN" -m gitlabDeployment=1 -m gitlabCommitRef="$CI_COMMIT_BRANCH"
+
+deploy:production:
   stage: deploy
   needs: ["lint", "build", "test:e2e"]
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
+  environment:
+    name: production
+    url: https://$PRODUCTION_DOMAIN
   script:
-    - echo "Quality gate passed on main — Vercel's GitLab integration handles the actual deploy."
+    - npm install --global vercel@latest
+    - vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+    - vercel build --prod --token="$VERCEL_TOKEN"
+    - vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" -m gitlabDeployment=1 -m gitlabCommitRef="$CI_COMMIT_BRANCH"

@@ -192,18 +192,24 @@ Bloque 2 (Fases 10–14) está en marcha:
 - **Fase 11 (Atlas)** — `lib/mongodb.ts` no necesita cambios: la cadena
   `mongodb+srv://...` de Atlas es solo otro valor de `MONGODB_URI`.
 - **Fase 12 (GitLab CI)** — `.gitlab-ci.yml` implementado: `install → lint →
-  build → test:e2e → deploy:gate`. `test:e2e` corre Docker-in-Docker
-  (imagen `mcr.microsoft.com/playwright`, servicio `docker:27-dind`) para
-  levantar el mismo stack efímero que en local — el pipeline **nunca**
-  corre contra Atlas/R2 de producción. `build` usa `.env.test` (placeholders
-  versionados) solo para satisfacer la validación de `lib/env.ts` al
-  compilar; no es un deploy. Estrategia de deploy adoptada:
-  **integración nativa de Vercel con GitLab** (Vercel despliega previews
-  por MR y producción al mergear a `main`, fuera de este pipeline);
-  `deploy:gate` no despliega, es el quality gate que la protección de rama
-  exige en verde antes de mergear. Alternativa documentada pero no usada:
-  `vercel deploy --prod --token=$VERCEL_TOKEN` con `VERCEL_TOKEN` /
-  `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` como variables protegidas.
+  build → test:e2e → deploy`. `test:e2e` corre Docker-in-Docker (imagen
+  `mcr.microsoft.com/playwright`, servicio `docker:27-dind`) para levantar
+  el mismo stack efímero que en local — el pipeline **nunca** corre contra
+  Atlas/R2 de producción. `build` usa `.env.test` (placeholders versionados)
+  solo para satisfacer la validación de `lib/env.ts` al compilar; no es un
+  deploy. Estrategia de deploy adoptada: **CLI de Vercel desde el propio
+  pipeline** (`vercel pull` → `vercel build` → `vercel deploy --prebuilt`),
+  **no** la integración nativa Vercel↔GitLab — esa integración nativa solo
+  soporta GitHub, GitLab.com y Bitbucket, y este repo vive en un GitLab
+  autoalojado (`gitlab.codecrypto.academy`), que Vercel no reconoce como
+  proveedor Git nativo. `deploy:production` corre en `main`;
+  `deploy:preview` corre manual en otras ramas. Requiere `VERCEL_TOKEN`
+  (enmascarada + protegida), `VERCEL_ORG_ID` y `VERCEL_PROJECT_ID` como
+  variables de CI/CD de GitLab — se obtienen enlazando el proyecto una vez
+  con `vercel link` (ver guía de despliegue compartida en el chat). Las
+  variables de entorno de producción en sí (`MONGODB_URI`, `S3_*`) viven
+  solo en Vercel (Project Settings → Environment Variables), nunca en
+  GitLab CI.
 - **Fase 13 (despliegue)** — pendiente de credenciales reales (Atlas, R2,
   Vercel, dominio); ver la guía paso a paso que se compartió en el chat
   para generarlas.
