@@ -60,26 +60,38 @@ export function ensureBucketExists(): Promise<void> {
         }),
       );
       // Recordings are played back with a plain <video src>, so the bucket
-      // needs anonymous read access. Fine for local RustFS; production
-      // (Fase 10, Cloudflare R2) should revisit public-read vs. presigned
-      // GET URLs per its own access-control requirements.
-      await s3Client.send(
-        new PutBucketPolicyCommand({
-          Bucket: env.S3_BUCKET,
-          Policy: JSON.stringify({
-            Version: "2012-10-17",
-            Statement: [
-              {
-                Sid: "PublicReadGetObject",
-                Effect: "Allow",
-                Principal: "*",
-                Action: "s3:GetObject",
-                Resource: `arn:aws:s3:::${env.S3_BUCKET}/*`,
-              },
-            ],
+      // needs anonymous read access. RustFS (local/S3-compatible) supports
+      // this via a standard bucket policy. Cloudflare R2 does NOT implement
+      // PutBucketPolicy at all — public access there is an account-level
+      // setting (Public Development URL or a custom domain, configured once
+      // in the Cloudflare dashboard or via Terraform/API token, not at
+      // request time). So this call is best-effort: on a backend that
+      // rejects it, we warn and move on instead of failing every upload.
+      try {
+        await s3Client.send(
+          new PutBucketPolicyCommand({
+            Bucket: env.S3_BUCKET,
+            Policy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Sid: "PublicReadGetObject",
+                  Effect: "Allow",
+                  Principal: "*",
+                  Action: "s3:GetObject",
+                  Resource: `arn:aws:s3:::${env.S3_BUCKET}/*`,
+                },
+              ],
+            }),
           }),
-        }),
-      );
+        );
+      } catch (error) {
+        console.warn(
+          "Skipping PutBucketPolicy (unsupported on this backend, e.g. Cloudflare R2). " +
+            "Configure public read access for the bucket manually if objects aren't reachable — see AGENTS.md.",
+          error instanceof Error ? error.message : error,
+        );
+      }
     })().catch((error) => {
       // Allow retrying on the next call instead of caching a permanent failure.
       bucketReadyPromise = null;

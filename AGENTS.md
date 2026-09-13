@@ -170,12 +170,42 @@ npm run test:e2e:ui           # Playwright UI mode (con el stack ya orquestado)
 
 ## Estado del plan (Bloque 1 vs. Bloque 2)
 
-Este repo implementa **Bloque 1 de `PROMT.md`** (Fases 0–9): app 100%
-funcional en local, con `AGENTS.md` y E2E incluidos. **Bloque 2** (Fases
-10–14: Cloudflare R2, MongoDB Atlas, GitLab CI, Vercel, dominio) no está
-ejecutado — requiere cuentas y credenciales reales que no existen en este
-entorno, y el propio `PROMT.md` exige una confirmación explícita antes de
-empezarlo. `lib/s3.ts` y `lib/mongodb.ts` ya están escritos para no
-necesitar cambios de código al pasar a R2/Atlas (solo variables de entorno),
-pero decisiones de Fase 10 como lectura pública vs. URLs firmadas de lectura
-en producción siguen pendientes de decidir.
+Bloque 1 de `PROMT.md` (Fases 0–9) está completo: app 100% funcional en
+local, con `AGENTS.md` y E2E incluidos.
+
+Bloque 2 (Fases 10–14) está en marcha:
+
+- **Fase 10 (R2)** — `lib/s3.ts` funciona contra RustFS y R2 sin cambio de
+  lógica, solo de variables de entorno, **con una excepción importante**:
+  R2 no implementa `PutBucketPolicy` (sí `PutBucketCors`). `ensureBucketExists`
+  intenta configurar la política de lectura pública y, si el backend la
+  rechaza, registra un aviso y continúa en vez de romper la subida — en R2
+  la lectura pública se activa una vez, a mano, desde el dashboard
+  (Public Development URL o dominio propio en el bucket), no vía API en
+  cada request. Decisión tomada: **bucket de lectura pública** (no URLs
+  firmadas de lectura), porque el flujo actual reproduce con
+  `<video src={s3Url}>` sin firmar — mantiene la arquitectura simple para
+  vídeos que no son sensibles. Si en el futuro se necesita contenido
+  privado, `RecordingsList`/`GET /api/recordings` tendrían que generar una
+  URL firmada de lectura por grabación en cada listado, ya que las firmadas
+  expiran y no se pueden guardar como `s3Url` estático en Mongo.
+- **Fase 11 (Atlas)** — `lib/mongodb.ts` no necesita cambios: la cadena
+  `mongodb+srv://...` de Atlas es solo otro valor de `MONGODB_URI`.
+- **Fase 12 (GitLab CI)** — `.gitlab-ci.yml` implementado: `install → lint →
+  build → test:e2e → deploy:gate`. `test:e2e` corre Docker-in-Docker
+  (imagen `mcr.microsoft.com/playwright`, servicio `docker:27-dind`) para
+  levantar el mismo stack efímero que en local — el pipeline **nunca**
+  corre contra Atlas/R2 de producción. `build` usa `.env.test` (placeholders
+  versionados) solo para satisfacer la validación de `lib/env.ts` al
+  compilar; no es un deploy. Estrategia de deploy adoptada:
+  **integración nativa de Vercel con GitLab** (Vercel despliega previews
+  por MR y producción al mergear a `main`, fuera de este pipeline);
+  `deploy:gate` no despliega, es el quality gate que la protección de rama
+  exige en verde antes de mergear. Alternativa documentada pero no usada:
+  `vercel deploy --prod --token=$VERCEL_TOKEN` con `VERCEL_TOKEN` /
+  `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` como variables protegidas.
+- **Fase 13 (despliegue)** — pendiente de credenciales reales (Atlas, R2,
+  Vercel, dominio); ver la guía paso a paso que se compartió en el chat
+  para generarlas.
+- **Fase 14 (README)** — pendiente hasta que haya una URL pública real que
+  documentar.
