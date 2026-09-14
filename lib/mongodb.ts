@@ -2,7 +2,6 @@ import { Collection, Db, MongoClient } from "mongodb";
 import { env } from "./env";
 import type { RecordingDocument } from "./types";
 
-const DB_NAME = "screen-capture";
 const RECORDINGS_COLLECTION = "recordings";
 
 // Cache the client (and the connect promise) on the Node global object so
@@ -22,7 +21,12 @@ function getClientPromise(): Promise<MongoClient> {
 
 export async function getDb(): Promise<Db> {
   const client = await getClientPromise();
-  return client.db(DB_NAME);
+  // No name passed: the driver defaults to whichever database is in the
+  // MONGODB_URI path (e.g. ".../screen-capture" locally,
+  // ".../screen-capture-prod" in production) instead of a name hardcoded
+  // here — a scoped Atlas user only granted access to one specific
+  // database name would otherwise get an authorization error.
+  return client.db();
 }
 
 export async function getRecordingsCollection(): Promise<Collection<RecordingDocument>> {
