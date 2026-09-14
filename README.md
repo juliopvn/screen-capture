@@ -86,6 +86,21 @@ npm run dev
 
 4. Abre [http://localhost:3000](http://localhost:3000). El navegador pedirá permiso para compartir pantalla.
 
+## 🌐 Despliegue
+
+La app está desplegada en producción: **[https://screen-capture.jpavon-tech.com](https://screen-capture.jpavon-tech.com)**
+
+**Arquitectura de producción:**
+
+| Capa | Servicio |
+|------|----------|
+| Frontend + API | [Vercel](https://vercel.com) |
+| Base de datos | [MongoDB Atlas](https://www.mongodb.com/atlas) |
+| Storage de vídeo | [Cloudflare R2](https://developers.cloudflare.com/r2/) (S3 compatible) |
+| Dominio | propio, gestionado en Cloudflare |
+
+**CI/CD**: cada push dispara un pipeline en GitLab CI (`.gitlab-ci.yml`) que valida, en orden, `lint` + `typecheck` → `build` → la suite E2E de Playwright completa (contra un stack Docker efímero, nunca contra los servicios de producción) antes de dar luz verde a `main`. El repositorio se sincroniza mediante *push mirror* a GitHub, desde donde Vercel despliega automáticamente en cada push. Detalle técnico completo del pipeline y de la estrategia de despliegue en [`AGENTS.md`](./AGENTS.md).
+
 <!-- BEGIN cc:que-se-valora -->
 ¡Hola! Para que tengas claro qué busco cuando corrija tu proyecto "Video Capture", te he preparado esta sección. Así sabes dónde poner el foco.
 
