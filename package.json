@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "test:e2e": "bash scripts/test-e2e.sh",

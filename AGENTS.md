@@ -134,6 +134,14 @@ propagar `undefined` a un cliente de S3 o Mongo.
    (`trap ... EXIT` en el script) — nunca deja contenedores ni datos de test
    huérfanos, y nunca toca los datos de desarrollo.
 
+En GitLab CI (`.gitlab-ci.yml`, job `test:e2e`) el mismo objetivo se logra
+de otra forma: `services:` nativos (`mongo:7` + `rustfs/rustfs:latest`
+como contenedores hermanos) en vez de `docker compose`, porque el único
+runner en línea de esta instancia no soporta Docker-in-Docker — ver Fase
+12 más abajo para el porqué. Si tocas `scripts/test-e2e.sh`, revisa si el
+cambio también aplica al job de CI (y viceversa); no comparten código,
+solo el objetivo.
+
 Por qué no se automatiza el selector nativo: `getDisplayMedia()` abre un
 diálogo del sistema operativo que no se puede pilotar de forma fiable en
 headless/CI. La cobertura principal sustituye
@@ -200,10 +208,18 @@ Bloque 2 (Fases 10–14) está en marcha:
 - **Fase 11 (Atlas)** — `lib/mongodb.ts` no necesita cambios: la cadena
   `mongodb+srv://...` de Atlas es solo otro valor de `MONGODB_URI`.
 - **Fase 12 (GitLab CI)** — `.gitlab-ci.yml` implementado: `install → lint →
-  build → test:e2e → deploy:gate`. `test:e2e` corre Docker-in-Docker (imagen
-  `mcr.microsoft.com/playwright`, servicio `docker:27-dind`) para levantar
-  el mismo stack efímero que en local — el pipeline **nunca** corre contra
-  Atlas/R2 de producción. `build` usa `.env.test` (placeholders versionados)
+  build → test:e2e → deploy:gate`. El único runner en línea de esta
+  instancia (`cloudrun-ephemeral`, ver `glab api runners/all`) es un
+  ejecutor sin Docker-in-Docker funcional (el runner pensado para eso,
+  `vps-dind-shared`, lleva meses offline), así que `test:e2e` en CI **no**
+  usa `docker compose` como en local — usa `services:` nativos de GitLab
+  (`mongo:7` y `rustfs/rustfs:latest` como contenedores hermanos,
+  `alias: mongo` / `alias: rustfs`), que no requieren modo privilegiado.
+  Localmente sigue siendo `docker compose` vía `scripts/test-e2e.sh`; son
+  dos mecanismos distintos para el mismo objetivo (backend real y
+  efímero), no dupliques lógica entre ambos si los tocas. El pipeline
+  **nunca** corre contra Atlas/R2 de producción. `build` usa `.env.test`
+  (placeholders versionados)
   solo para satisfacer la validación de `lib/env.ts` al compilar; no es un
   deploy. Estrategia de deploy adoptada: **mirror de GitLab a GitHub +
   integración nativa de Vercel con GitHub** — la integración nativa

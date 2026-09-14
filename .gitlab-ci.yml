@@ -57,30 +57,56 @@ build:
     - npx dotenv -e .env.test -- npm run build
 
 # getDisplayMedia can't be driven headlessly, so the app's own E2E suite
-# mocks it and runs against a REAL ephemeral backend (Mongo + RustFS)
-# instead of hitting Atlas/R2 from CI — see AGENTS.md > Testing and
-# scripts/test-e2e.sh. This stage needs Docker-in-Docker to bring that
-# stack up.
+# mocks it and runs against a REAL ephemeral backend instead of hitting
+# Atlas/R2 from CI — see AGENTS.md > Testing.
+#
+# Locally (scripts/test-e2e.sh) that backend is Mongo + RustFS via
+# `docker compose`. In CI it's the same two images, but as GitLab's own
+# `services:` (sibling containers) instead — this instance's only online
+# runner is a Kubernetes-style executor with no working Docker-in-Docker
+# (the runner actually built for dind has been offline for months, and
+# `docker:dind` here fails outright: "lookup docker ... no such host").
+# Native services need no privileged mode and no docker-compose at all,
+# so this sidesteps the problem instead of fighting the runner for it.
 test:e2e:
   stage: test
   needs: ["install"]
   image: mcr.microsoft.com/playwright:v1.63.0-jammy
   services:
-    - docker:27-dind
+    - name: mongo:7
+      alias: mongo
+    - name: rustfs/rustfs:latest
+      alias: rustfs
+      variables:
+        RUSTFS_ACCESS_KEY: rustfsadmin
+        RUSTFS_SECRET_KEY: rustfsadmin
+        RUSTFS_VOLUMES: /data/rustfs0
+        RUSTFS_ADDRESS: 0.0.0.0:9000
+        RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+        RUSTFS_CONSOLE_ENABLE: "true"
   variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
+    MONGODB_URI: mongodb://mongo:27017/screen-capture-ci
+    S3_ENDPOINT: http://rustfs:9000
+    S3_ACCESS_KEY: rustfsadmin
+    S3_SECRET_KEY: rustfsadmin
+    S3_BUCKET: recordings-ci
+    S3_REGION: auto
+    S3_FORCE_PATH_STYLE: "true"
+    S3_PUBLIC_URL: http://rustfs:9000/recordings-ci
+    S3_CORS_ORIGIN: "*"
+    NODE_ENV: test
   before_script:
-    - apt-get update -y
-    - install -m 0755 -d /etc/apt/keyrings
-    - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    - chmod a+r /etc/apt/keyrings/docker.asc
-    - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
-    - apt-get update -y
-    - apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin
     - npm ci --prefer-offline
   script:
-    - npm run test:e2e
+    - npx next build
+    - npx next start -p 3100 &
+    - |
+      for i in $(seq 1 60); do
+        curl -sf http://localhost:3100 > /dev/null && break
+        [ "$i" -eq 60 ] && { echo "Server did not start in time" >&2; exit 1; }
+        sleep 1
+      done
+    - npx playwright test
   artifacts:
     when: always
     expire_in: 7 days
