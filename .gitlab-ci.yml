@@ -107,19 +107,25 @@ test:e2e:
     # Belt-and-suspenders: this image is supposed to ship a matching
     # Chromium already, but it wasn't where Playwright looked
     # (~/.cache/ms-playwright) — install explicitly rather than trust
-    # the image's PLAYWRIGHT_BROWSERS_PATH setup. System deps are
-    # already present on this image, so --with-deps isn't needed.
-    - npx playwright install chromium
+    # the image's PLAYWRIGHT_BROWSERS_PATH setup. --with-deps because a
+    # freshly downloaded browser needs its own apt dependencies
+    # (libglib-2.0.so.0 etc.) that plain `install chromium` skips.
+    - npx playwright install --with-deps chromium
   script:
     - npx next build
-    - npx next start -p 3100 &
+    # Redirected, not inherited: an unredirected background process here
+    # keeps the job's stdout/stderr pipe open forever (next start never
+    # exits on its own), so gitlab-runner never sees EOF and the job
+    # hangs well past when the tests actually finish.
+    - npx next start -p 3100 > next-start.log 2>&1 &
+    - SERVER_PID=$!
     - |
       for i in $(seq 1 60); do
         curl -sf http://localhost:3100 > /dev/null && break
-        [ "$i" -eq 60 ] && { echo "Server did not start in time" >&2; exit 1; }
+        [ "$i" -eq 60 ] && { echo "Server did not start in time" >&2; cat next-start.log; exit 1; }
         sleep 1
       done
-    - npx playwright test
+    - npx playwright test; EXIT_CODE=$?; kill "$SERVER_PID" 2>/dev/null || true; exit $EXIT_CODE
   artifacts:
     when: always
     expire_in: 7 days
