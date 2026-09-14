@@ -25,19 +25,22 @@ default:
       - .npm/
       - node_modules/
 
+# Installs once to fail fast and warm the shared cache (keyed on
+# package-lock.json, see `default.cache` above). Does NOT pass
+# node_modules/ downstream as a job artifact — with ~28k files it blew
+# past this instance's artifact upload size limit (413). Every job below
+# instead runs its own `npm ci --prefer-offline`, which is fast because
+# the cache is already warm — cheaper than fighting artifact size limits.
 install:
   stage: install
   script:
     - npm ci --prefer-offline
-  artifacts:
-    expire_in: 1 hour
-    paths:
-      - node_modules/
 
 lint:
   stage: lint
   needs: ["install"]
   script:
+    - npm ci --prefer-offline
     - npm run lint
     - npm run typecheck
 
@@ -45,14 +48,13 @@ build:
   stage: build
   needs: ["install"]
   script:
+    - npm ci --prefer-offline
     # Compile-only quality gate: no real secrets needed, so it reuses the
     # committed, placeholder-only .env.test (same one the E2E stage uses)
-    # just to satisfy lib/env.ts validation at build time.
+    # just to satisfy lib/env.ts validation at build time. Output isn't
+    # needed downstream (Vercel does its own build for the real deploy),
+    # so no artifact here either.
     - npx dotenv -e .env.test -- npm run build
-  artifacts:
-    expire_in: 1 hour
-    paths:
-      - .next/
 
 # getDisplayMedia can't be driven headlessly, so the app's own E2E suite
 # mocks it and runs against a REAL ephemeral backend (Mongo + RustFS)
@@ -76,6 +78,7 @@ test:e2e:
     - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
     - apt-get update -y
     - apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin
+    - npm ci --prefer-offline
   script:
     - npm run test:e2e
   artifacts:
