@@ -11,6 +11,12 @@ variables:
 
 default:
   image: $NODE_IMAGE
+  # This instance's only online shared runner ("cloudrun-ephemeral")
+  # requires this tag and ignores untagged jobs (run_untagged: false) —
+  # without it every job sits queued until it times out. Check `glab api
+  # runners/all` if this ever needs revisiting (e.g. a new runner appears).
+  tags:
+    - cloudrun
   cache:
     key:
       files:
